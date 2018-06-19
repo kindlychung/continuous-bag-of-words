@@ -1,19 +1,21 @@
 import torch
-from torch.autograd import Variable
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
+
 
 def make_context_vector(context, word_to_ix):
     idxs = [word_to_ix[w] for w in context]
-    tensor = torch.LongTensor(idxs)
-    return Variable(tensor)
+    return torch.LongTensor(idxs)
+
 
 def get_index_of_max(input):
     index = 0
     for i in range(1, len(input)):
         if input[i] > input[index]:
-            index = i 
+            index = i
     return index
+
 
 def get_max_prob_result(input, ix_to_word):
     return ix_to_word[get_index_of_max(input)]
@@ -32,7 +34,6 @@ The evolution of a process is directed by a pattern of rules
 called a program. People create programs to direct processes. In effect,
 we conjure the spirits of the computer with our spells.""".split()
 
-
 # By deriving a set from `raw_text`, we deduplicate the array
 vocab = set(raw_text)
 vocab_size = len(vocab)
@@ -42,67 +43,54 @@ for i, word in enumerate(vocab):
     ix_to_word[i] = word
 
 data = []
-for i in range(2, len(raw_text) - 2):
+for i in range(CONTEXT_SIZE, len(raw_text) - CONTEXT_SIZE):
+    # [raw_text[i-j] for j in reversed(range(1, CONTEXT_SIZE+1))]
     context = [raw_text[i - 2], raw_text[i - 1],
                raw_text[i + 1], raw_text[i + 2]]
     target = raw_text[i]
     data.append((context, target))
 
 
-
 class CBOW(torch.nn.Module):
-
-    def __init__(self, vocab_size, embedding_dim):
-        super(CBOW, self).__init__()
-
-        #out: 1 x emdedding_dim
+    def __init__(self, vocab_size, embedding_dim, context_size):
+        super().__init__()
+        # out: 1 x emdedding_dim
         self.embeddings = nn.Embedding(vocab_size, embedding_dim)
-
-        self.linear1 = nn.Linear(embedding_dim, 128)
-
+        self.linear1 = nn.Linear(2 * context_size * embedding_dim, 128)
         self.activation_function1 = nn.ReLU()
-        
-        #out: 1 x vocab_size
+        # out: 1 x vocab_size
         self.linear2 = nn.Linear(128, vocab_size)
-
-        self.activation_function2 = nn.LogSoftmax(dim = -1)
-        
-
+        self.activation_function2 = nn.LogSoftmax(dim=-1)
     def forward(self, inputs):
-        embeds = sum(self.embeddings(inputs)).view(1,-1)
+        embeds = self.embeddings(inputs).view(1, -1)
         out = self.linear1(embeds)
-        out = self.activation_function1(out)
+        out = F.relu(out)
         out = self.linear2(out)
-        out = self.activation_function2(out)
+        out = F.log_softmax(out)
         return out
-
     def get_word_emdedding(self, word):
-        word = Variable(torch.LongTensor([word_to_ix[word]]))
-        return self.embeddings(word).view(1,-1)
+        word = torch.LongTensor([word_to_ix[word]])
+        return self.embeddings(word).view(1, -1)
 
 
-model = CBOW(vocab_size, EMDEDDING_DIM)
-
+model = CBOW(vocab_size, EMDEDDING_DIM, CONTEXT_SIZE)
 loss_function = nn.NLLLoss()
 optimizer = torch.optim.SGD(model.parameters(), lr=0.001)
-
-
 
 for epoch in range(50):
     total_loss = 0
     for context, target in data:
-        context_vector = make_context_vector(context, word_to_ix)  
+        context_vector = make_context_vector(context, word_to_ix)
         model.zero_grad()
         log_probs = model(context_vector)
-        loss = loss_function(log_probs, Variable(
-            torch.LongTensor([word_to_ix[target]])))
+        loss = loss_function(log_probs,
+            torch.LongTensor([word_to_ix[target]]))
         loss.backward()
         optimizer.step()
-
         total_loss += loss.data
 
 # ====================== TEST
-context = ['People','create','to', 'direct']
+context = ['People', 'create', 'to', 'direct']
 context_vector = make_context_vector(context, word_to_ix)
 a = model(context_vector).data.numpy()
 print('Raw text: {}\n'.format(' '.join(raw_text)))
