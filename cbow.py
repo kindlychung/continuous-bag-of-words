@@ -44,9 +44,9 @@ for i, word in enumerate(vocab):
 
 data = []
 for i in range(CONTEXT_SIZE, len(raw_text) - CONTEXT_SIZE):
-    # [raw_text[i-j] for j in reversed(range(1, CONTEXT_SIZE+1))]
-    context = [raw_text[i - 2], raw_text[i - 1],
-               raw_text[i + 1], raw_text[i + 2]]
+    context = [raw_text[i-j] for j in reversed(range(1, CONTEXT_SIZE+1))] + [raw_text[i+j] for j in reversed(range(1, CONTEXT_SIZE+1))]
+    # context = [raw_text[i - 2], raw_text[i - 1],
+    #            raw_text[i + 1], raw_text[i + 2]]
     target = raw_text[i]
     data.append((context, target))
 
@@ -66,7 +66,7 @@ class CBOW(torch.nn.Module):
         out = self.linear1(embeds)
         out = F.relu(out)
         out = self.linear2(out)
-        out = F.log_softmax(out)
+        out = F.log_softmax(out, dim=1)
         return out
     def get_word_emdedding(self, word):
         word = torch.LongTensor([word_to_ix[word]])
